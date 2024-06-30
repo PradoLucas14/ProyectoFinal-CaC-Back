@@ -5,8 +5,8 @@ app = Flask(__name__)
 
 # Configuración de la base de datos
 db_config = {
-    'user': 'tu_usuario',          # Reemplaza 'tu_usuario' con tu nombre de usuario de MySQL
-    'password': 'tu_contraseña',    # Reemplaza 'tu_contraseña' con tu contraseña de MySQL
+    'user': 'root',        
+    'password': 'AaNl0019',  
     'host': 'localhost',
     'database': 'sistema_turnos'
 }
@@ -103,4 +103,4 @@ def delete_turno(id):
     return '', 204
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(port=5000, debug=True)  # Especificar el puerto 5000
