@@ -7,7 +7,7 @@ app = Flask(__name__)
 # Configuración de la base de datos
 db_config = {
     'user': 'root',
-    'password': 'tu_contraseña',  # Reemplaza 'tu_contraseña' con tu contraseña de MySQL
+    'password': 'AaNl0019',  # Reemplaza 'tu_contraseña' con tu contraseña de MySQL
     'host': 'localhost',
     'database': 'sistema_turnos'
 }
@@ -50,6 +50,23 @@ def add_turno():
 
     conn = get_db_connection()
     cursor = conn.cursor()
+
+    # Verificar si ya existe un turno con la misma hora y fecha
+    cursor.execute('''
+        SELECT * FROM turnos
+        WHERE fecha = %s AND (
+            (hora_inicio <= %s AND hora_fin > %s) OR
+            (hora_inicio < %s AND hora_fin >= %s)
+        )
+    ''', (fecha, hora_fin, hora_inicio, hora_inicio, hora_fin))
+    existing_turno = cursor.fetchone()
+
+    if existing_turno:
+        cursor.close()
+        conn.close()
+        return jsonify({"error": "Ya existe un turno en ese horario para la misma fecha."}), 400
+
+    # Si no existe conflicto, insertar el nuevo turno
     cursor.execute('''
         INSERT INTO turnos (nombre_cliente, fecha, hora_inicio, hora_fin, estado)
         VALUES (%s, %s, %s, %s, %s)
