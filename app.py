@@ -92,19 +92,64 @@ def update_turno(id):
 def patch_turno(id):
     patch_data = request.json
 
+    # Obtener los valores actuales del turno
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
-
-    # Obtener los valores actuales del turno
     cursor.execute('SELECT * FROM turnos WHERE id = %s', (id,))
     turno = cursor.fetchone()
 
     if not turno:
+        cursor.close()
+        conn.close()
         return jsonify({"error": "Turno no encontrado"}), 404
 
-    # Actualizar solo los campos proporcionados en la solicitud
-    turno.update(patch_data)
+    # Actualizar los valores del turno con los datos proporcionados
+    if 'nombre_cliente' in patch_data:
+        turno['nombre_cliente'] = patch_data['nombre_cliente']
+    if 'fecha' in patch_data:
+        turno['fecha'] = patch_data['fecha']
+    if 'hora_inicio' in patch_data:
+        try:
+            turno['hora_inicio'] = datetime.strptime(patch_data['hora_inicio'], '%H:%M:%S').time()
+        except ValueError:
+            cursor.close()
+            conn.close()
+            return jsonify({"error": "El formato de la hora debe ser HH:MM:SS."}), 400
+    if 'hora_fin' in patch_data:
+        try:
+            turno['hora_fin'] = datetime.strptime(patch_data['hora_fin'], '%H:%M:%S').time()
+        except ValueError:
+            cursor.close()
+            conn.close()
+            return jsonify({"error": "El formato de la hora debe ser HH:MM:SS."}), 400
+    if 'estado' in patch_data:
+        turno['estado'] = patch_data['estado']
 
+    # Validar el rango horario
+    hora_apertura = time(8, 0, 0)
+    hora_cierre = time(21, 0, 0)
+
+    if not (hora_apertura <= turno['hora_inicio'] < hora_cierre and hora_apertura < turno['hora_fin'] <= hora_cierre):
+        cursor.close()
+        conn.close()
+        return jsonify({"error": "El turno debe estar dentro del rango horario permitido (08:00 - 21:00)."}), 400
+
+    # Verificar si ya existe un turno con la misma hora y fecha
+    cursor.execute('''
+        SELECT * FROM turnos
+        WHERE fecha = %s AND id != %s AND (
+            (hora_inicio <= %s AND hora_fin > %s) OR
+            (hora_inicio < %s AND hora_fin >= %s)
+        )
+    ''', (turno['fecha'], id, turno['hora_fin'], turno['hora_inicio'], turno['hora_inicio'], turno['hora_fin']))
+    existing_turno = cursor.fetchone()
+
+    if existing_turno:
+        cursor.close()
+        conn.close()
+        return jsonify({"error": "Ya existe un turno en ese horario para la misma fecha."}), 400
+
+    # Si no existe conflicto, actualizar el turno
     cursor.execute('''
         UPDATE turnos
         SET nombre_cliente = %s, fecha = %s, hora_inicio = %s, hora_fin = %s, estado = %s
@@ -113,8 +158,8 @@ def patch_turno(id):
     conn.commit()
     cursor.close()
     conn.close()
-    
-    # Convertir los objetos timedelta a cadenas
+
+    # Convertir los objetos timedelta a cadenas para la respuesta
     turno['hora_inicio'] = str(turno['hora_inicio'])
     turno['hora_fin'] = str(turno['hora_fin'])
     
