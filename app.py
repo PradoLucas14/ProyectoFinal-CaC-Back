@@ -15,7 +15,7 @@ cursor = mydb.cursor()
 
 # Crear instancia de Flask
 app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": "http://localhost:5174"}})
+CORS(app, resources={r"/*": {"origins": "http://localhost:5173"}})
 
 # Ruta para registrar un nuevo usuario
 @app.route('/registrar', methods=['POST'])
