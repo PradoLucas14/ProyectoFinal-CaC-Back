@@ -1,179 +1,109 @@
-from flask import Flask, request, jsonify
 import mysql.connector
-from datetime import datetime, time  # Asegúrate de importar datetime y time
+from flask import Flask, request, jsonify
+from flask_cors import CORS
 
+# Configuración de la conexión a MySQL
+mydb = mysql.connector.connect(
+    host="localhost",
+    user="root",
+    password="AaNl0019",
+    database="registro_usuarios"
+)
+
+# Crear un cursor para ejecutar consultas
+cursor = mydb.cursor()
+
+# Crear instancia de Flask
 app = Flask(__name__)
+CORS(app, resources={r"/*": {"origins": "http://localhost:5174"}})
 
-# Configuración de la base de datos
-db_config = {
-    'user': 'root',
-    'password': 'AaNl0019', 
-    'host': 'localhost',
-    'database': 'sistema_turnos'
-}
-
-def get_db_connection():
-    return mysql.connector.connect(**db_config)
-
-@app.route('/turnos', methods=['POST'])
-def add_turno():
-    new_turno = request.json
-    nombre_cliente = new_turno['nombre_cliente']
-    fecha = new_turno['fecha']
-    hora_inicio = new_turno['hora_inicio']
-    hora_fin = new_turno['hora_fin']
-    estado = new_turno['estado']
-
-    # Validar el formato de la hora
+# Ruta para registrar un nuevo usuario
+@app.route('/registrar', methods=['POST'])
+def registrar_usuario():
+    data = request.get_json()
+    nombre = data['nombre']
+    email = data['email']
+    contraseña = data['contraseña']
     try:
-        hora_inicio = datetime.strptime(hora_inicio, '%H:%M:%S').time()
-        hora_fin = datetime.strptime(hora_fin, '%H:%M:%S').time()
-    except ValueError:
-        return jsonify({"error": "El formato de la hora debe ser HH:MM:SS."}), 400
+        sql = "INSERT INTO usuarios (nombre, email, contraseña) VALUES (%s, %s, %s)"
+        val = (nombre, email, contraseña)
+        cursor.execute(sql, val)
+        mydb.commit()
+        return jsonify({"mensaje": "Usuario registrado correctamente"}), 200
+    except mysql.connector.Error as err:
+        return jsonify({"error": f"Error al registrar usuario: {err}"}), 500
 
-    # Definir el rango horario permitido
-    hora_apertura = time(8, 0, 0)
-    hora_cierre = time(21, 0, 0)
+# Ruta para autenticar a un usuario
+@app.route('/login', methods=['POST'])
+def autenticar_usuario():
+    data = request.get_json()
+    email = data['email']
+    contraseña = data['contraseña']
+    try:
+        sql = "SELECT * FROM usuarios WHERE email = %s AND contraseña = %s"
+        cursor.execute(sql, (email, contraseña))
+        resultado = cursor.fetchone()
+        if resultado:
+            return jsonify({"mensaje": "Inicio de sesión exitoso"}), 200
+        else:
+            return jsonify({"error": "Credenciales incorrectas"}), 401
+    except mysql.connector.Error as err:
+        return jsonify({"error": f"Error al autenticar usuario: {err}"}), 500
 
-    # Verificar que las horas estén dentro del rango permitido
-    if not (hora_apertura <= hora_inicio < hora_cierre and hora_apertura < hora_fin <= hora_cierre):
-        return jsonify({"error": "El turno debe estar dentro del rango horario permitido (08:00 - 21:00)."}), 400
+# Ruta para obtener todos los usuarios registrados
+@app.route('/usuarios', methods=['GET'])
+def obtener_usuarios():
+    try:
+        sql = "SELECT id, nombre, email FROM usuarios"
+        cursor.execute(sql)
+        usuarios = cursor.fetchall()
+        usuarios_list = []
+        for usuario in usuarios:
+            usuario_dict = {
+                "id": usuario[0],
+                "nombre": usuario[1],
+                "email": usuario[2]
+            }
+            usuarios_list.append(usuario_dict)
+        return jsonify({"usuarios": usuarios_list}), 200
+    except mysql.connector.Error as err:
+        return jsonify({"error": f"Error al obtener usuarios: {err}"}), 500
 
-    conn = get_db_connection()
-    cursor = conn.cursor()
-
-    # Verificar si ya existe un turno con la misma hora y fecha
-    cursor.execute('''
-        SELECT * FROM turnos
-        WHERE fecha = %s AND (
-            (hora_inicio <= %s AND hora_fin > %s) OR
-            (hora_inicio < %s AND hora_fin >= %s)
-        )
-    ''', (fecha, hora_fin, hora_inicio, hora_inicio, hora_fin))
-    existing_turno = cursor.fetchone()
-
-    if existing_turno:
-        cursor.close()
-        conn.close()
-        return jsonify({"error": "Ya existe un turno en ese horario para la misma fecha."}), 400
-
-    # Si no existe conflicto, insertar el nuevo turno
-    cursor.execute('''
-        INSERT INTO turnos (nombre_cliente, fecha, hora_inicio, hora_fin, estado)
-        VALUES (%s, %s, %s, %s, %s)
-    ''', (nombre_cliente, fecha, hora_inicio, hora_fin, estado))
-    conn.commit()
-    cursor.close()
-    conn.close()
-    return jsonify(new_turno), 201
-
-@app.route('/turnos/<int:id>', methods=['PUT'])
-def update_turno(id):
-    update_turno = request.json
-    nombre_cliente = update_turno['nombre_cliente']
-    fecha = update_turno['fecha']
-    hora_inicio = update_turno['hora_inicio']
-    hora_fin = update_turno['hora_fin']
-    estado = update_turno['estado']
-
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute('''
-        UPDATE turnos
-        SET nombre_cliente = %s, fecha = %s, hora_inicio = %s, hora_fin = %s, estado = %s
-        WHERE id = %s
-    ''', (nombre_cliente, fecha, hora_inicio, hora_fin, estado, id))
-    conn.commit()
-    cursor.close()
-    conn.close()
-    return jsonify(update_turno)
-
-@app.route('/turnos/<int:id>', methods=['PATCH'])
-def patch_turno(id):
-    patch_data = request.json
-
-    # Obtener los valores actuales del turno
-    conn = get_db_connection()
-    cursor = conn.cursor(dictionary=True)
-    cursor.execute('SELECT * FROM turnos WHERE id = %s', (id,))
-    turno = cursor.fetchone()
-
-    if not turno:
-        cursor.close()
-        conn.close()
-        return jsonify({"error": "Turno no encontrado"}), 404
-
-    # Actualizar los valores del turno con los datos proporcionados
-    if 'nombre_cliente' in patch_data:
-        turno['nombre_cliente'] = patch_data['nombre_cliente']
-    if 'fecha' in patch_data:
-        turno['fecha'] = patch_data['fecha']
-    if 'hora_inicio' in patch_data:
-        try:
-            turno['hora_inicio'] = datetime.strptime(patch_data['hora_inicio'], '%H:%M:%S').time()
-        except ValueError:
-            cursor.close()
-            conn.close()
-            return jsonify({"error": "El formato de la hora debe ser HH:MM:SS."}), 400
-    if 'hora_fin' in patch_data:
-        try:
-            turno['hora_fin'] = datetime.strptime(patch_data['hora_fin'], '%H:%M:%S').time()
-        except ValueError:
-            cursor.close()
-            conn.close()
-            return jsonify({"error": "El formato de la hora debe ser HH:MM:SS."}), 400
-    if 'estado' in patch_data:
-        turno['estado'] = patch_data['estado']
-
-    # Validar el rango horario
-    hora_apertura = time(8, 0, 0)
-    hora_cierre = time(21, 0, 0)
-
-    if not (hora_apertura <= turno['hora_inicio'] < hora_cierre and hora_apertura < turno['hora_fin'] <= hora_cierre):
-        cursor.close()
-        conn.close()
-        return jsonify({"error": "El turno debe estar dentro del rango horario permitido (08:00 - 21:00)."}), 400
-
-    # Verificar si ya existe un turno con la misma hora y fecha
-    cursor.execute('''
-        SELECT * FROM turnos
-        WHERE fecha = %s AND id != %s AND (
-            (hora_inicio <= %s AND hora_fin > %s) OR
-            (hora_inicio < %s AND hora_fin >= %s)
-        )
-    ''', (turno['fecha'], id, turno['hora_fin'], turno['hora_inicio'], turno['hora_inicio'], turno['hora_fin']))
-    existing_turno = cursor.fetchone()
-
-    if existing_turno:
-        cursor.close()
-        conn.close()
-        return jsonify({"error": "Ya existe un turno en ese horario para la misma fecha."}), 400
-
-    # Si no existe conflicto, actualizar el turno
-    cursor.execute('''
-        UPDATE turnos
-        SET nombre_cliente = %s, fecha = %s, hora_inicio = %s, hora_fin = %s, estado = %s
-        WHERE id = %s
-    ''', (turno['nombre_cliente'], turno['fecha'], turno['hora_inicio'], turno['hora_fin'], turno['estado'], id))
-    conn.commit()
-    cursor.close()
-    conn.close()
-
-    # Convertir los objetos timedelta a cadenas para la respuesta
-    turno['hora_inicio'] = str(turno['hora_inicio'])
-    turno['hora_fin'] = str(turno['hora_fin'])
+@app.route('/usuarios/<int:id>', methods=['DELETE'])
+def eliminar_usuario(id):
+    try:
+        sql = "DELETE FROM usuarios WHERE id = %s"
+        cursor.execute(sql, (id,))
+        mydb.commit()
+        return jsonify({"mensaje": f"Usuario con ID {id} eliminado correctamente"}), 200
+    except mysql.connector.Error as err:
+        return jsonify({"error": f"Error al eliminar usuario: {err}"}), 500
     
-    return jsonify(turno)
+# Ruta para editar parcialmente un usuario
+@app.route('/usuarios/<int:id>', methods=['PATCH'])
+def editar_usuario(id):
+    try:
+        # Obtener datos del cuerpo de la solicitud
+        data = request.get_json()
+        
+        # Verificar qué campos se están actualizando
+        if 'nombre' in data:
+            cursor.execute("UPDATE usuarios SET nombre = %s WHERE id = %s", (data['nombre'], id))
+        if 'email' in data:
+            cursor.execute("UPDATE usuarios SET email = %s WHERE id = %s", (data['email'], id))
+        if 'contraseña' in data:
+            cursor.execute("UPDATE usuarios SET contraseña = %s WHERE id = %s", (data['contraseña'], id))
+        
+        mydb.commit()
 
-@app.route('/turnos/<int:id>', methods=['DELETE'])
-def delete_turno(id):
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute('DELETE FROM turnos WHERE id = %s', (id,))
-    conn.commit()
-    cursor.close()
-    conn.close()
-    return '', 204
+        # Obtener y devolver el usuario actualizado
+        cursor.execute("SELECT * FROM usuarios WHERE id = %s", (id,))
+        usuario_actualizado = cursor.fetchone()
+        return jsonify({"mensaje": "Usuario actualizado correctamente", "usuario": usuario_actualizado}), 200
+    except mysql.connector.Error as err:
+        return jsonify({"error": f"Error al actualizar usuario: {err}"}), 500
+
+
 
 if __name__ == '__main__':
-    app.run(port=5000, debug=True)
+    app.run(debug=True, port=4000)
