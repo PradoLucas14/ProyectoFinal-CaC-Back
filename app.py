@@ -1,18 +1,27 @@
 from flask import Flask, request, jsonify
 import mysql.connector
+from datetime import timedelta
 
 app = Flask(__name__)
 
 # Configuración de la base de datos
 db_config = {
-    'user': 'root',        
-    'password': 'AaNl0019',  
+    'user': 'root',
+    'password': 'tu_contraseña',  # Reemplaza 'tu_contraseña' con tu contraseña de MySQL
     'host': 'localhost',
     'database': 'sistema_turnos'
 }
 
 def get_db_connection():
     return mysql.connector.connect(**db_config)
+
+def timedelta_to_str(timedelta_obj):
+    if isinstance(timedelta_obj, timedelta):
+        total_seconds = int(timedelta_obj.total_seconds())
+        hours, remainder = divmod(total_seconds, 3600)
+        minutes, seconds = divmod(remainder, 60)
+        return f"{hours:02}:{minutes:02}:{seconds:02}"
+    return timedelta_obj
 
 @app.route('/turnos', methods=['GET'])
 def get_turnos():
@@ -22,6 +31,12 @@ def get_turnos():
     turnos = cursor.fetchall()
     cursor.close()
     conn.close()
+    
+    # Convertir los objetos timedelta a cadenas
+    for turno in turnos:
+        turno['hora_inicio'] = str(turno['hora_inicio'])
+        turno['hora_fin'] = str(turno['hora_fin'])
+    
     return jsonify(turnos)
 
 @app.route('/turnos', methods=['POST'])
@@ -90,6 +105,11 @@ def patch_turno(id):
     conn.commit()
     cursor.close()
     conn.close()
+    
+    # Convertir los objetos timedelta a cadenas
+    turno['hora_inicio'] = str(turno['hora_inicio'])
+    turno['hora_fin'] = str(turno['hora_fin'])
+    
     return jsonify(turno)
 
 @app.route('/turnos/<int:id>', methods=['DELETE'])
@@ -103,4 +123,4 @@ def delete_turno(id):
     return '', 204
 
 if __name__ == '__main__':
-    app.run(port=5000, debug=True)  # Especificar el puerto 5000
+    app.run(port=5000, debug=True)
