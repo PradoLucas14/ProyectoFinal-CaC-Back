@@ -1,43 +1,19 @@
 from flask import Flask, request, jsonify
 import mysql.connector
-from datetime import timedelta
+from datetime import datetime, time  # Asegúrate de importar datetime y time
 
 app = Flask(__name__)
 
 # Configuración de la base de datos
 db_config = {
     'user': 'root',
-    'password': 'AaNl0019',  # Reemplaza 'tu_contraseña' con tu contraseña de MySQL
+    'password': 'AaNl0019', 
     'host': 'localhost',
     'database': 'sistema_turnos'
 }
 
 def get_db_connection():
     return mysql.connector.connect(**db_config)
-
-def timedelta_to_str(timedelta_obj):
-    if isinstance(timedelta_obj, timedelta):
-        total_seconds = int(timedelta_obj.total_seconds())
-        hours, remainder = divmod(total_seconds, 3600)
-        minutes, seconds = divmod(remainder, 60)
-        return f"{hours:02}:{minutes:02}:{seconds:02}"
-    return timedelta_obj
-
-@app.route('/turnos', methods=['GET'])
-def get_turnos():
-    conn = get_db_connection()
-    cursor = conn.cursor(dictionary=True)
-    cursor.execute('SELECT * FROM turnos')
-    turnos = cursor.fetchall()
-    cursor.close()
-    conn.close()
-    
-    # Convertir los objetos timedelta a cadenas
-    for turno in turnos:
-        turno['hora_inicio'] = str(turno['hora_inicio'])
-        turno['hora_fin'] = str(turno['hora_fin'])
-    
-    return jsonify(turnos)
 
 @app.route('/turnos', methods=['POST'])
 def add_turno():
@@ -47,6 +23,21 @@ def add_turno():
     hora_inicio = new_turno['hora_inicio']
     hora_fin = new_turno['hora_fin']
     estado = new_turno['estado']
+
+    # Validar el formato de la hora
+    try:
+        hora_inicio = datetime.strptime(hora_inicio, '%H:%M:%S').time()
+        hora_fin = datetime.strptime(hora_fin, '%H:%M:%S').time()
+    except ValueError:
+        return jsonify({"error": "El formato de la hora debe ser HH:MM:SS."}), 400
+
+    # Definir el rango horario permitido
+    hora_apertura = time(8, 0, 0)
+    hora_cierre = time(21, 0, 0)
+
+    # Verificar que las horas estén dentro del rango permitido
+    if not (hora_apertura <= hora_inicio < hora_cierre and hora_apertura < hora_fin <= hora_cierre):
+        return jsonify({"error": "El turno debe estar dentro del rango horario permitido (08:00 - 21:00)."}), 400
 
     conn = get_db_connection()
     cursor = conn.cursor()
