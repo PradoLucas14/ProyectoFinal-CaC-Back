@@ -1,23 +1,29 @@
+import os
+from dotenv import load_dotenv
 import mysql.connector
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 
-# Configuración de la conexión a MySQL
+load_dotenv()
+
 mydb = mysql.connector.connect(
-    host="localhost",
-    user="root",
-    password="AaNl0019",
-    database="registro_usuarios"
+    host=os.getenv("MYSQL_HOST"),
+    user=os.getenv("MYSQL_USER"),
+    password=os.getenv("MYSQL_PASSWORD"),
+    database=os.getenv("MYSQL_DATABASE")
 )
 
-# Crear un cursor para ejecutar consultas
 cursor = mydb.cursor()
 
-# Crear instancia de Flask
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "http://localhost:5173"}})
 
-# Ruta para registrar un nuevo usuario
+@app.after_request
+def after_request(response):
+    response.headers.add('Access-Control-Allow-Headers', 'Content-Type,Authorization')
+    response.headers.add('Access-Control-Allow-Methods', 'GET,PUT,POST,DELETE,PATCH,OPTIONS')
+    return response
+
 @app.route('/registrar', methods=['POST'])
 def registrar_usuario():
     data = request.get_json()
@@ -33,7 +39,6 @@ def registrar_usuario():
     except mysql.connector.Error as err:
         return jsonify({"error": f"Error al registrar usuario: {err}"}), 500
 
-# Ruta para autenticar a un usuario
 @app.route('/login', methods=['POST'])
 def autenticar_usuario():
     data = request.get_json()
@@ -50,7 +55,6 @@ def autenticar_usuario():
     except mysql.connector.Error as err:
         return jsonify({"error": f"Error al autenticar usuario: {err}"}), 500
 
-# Ruta para obtener todos los usuarios registrados
 @app.route('/usuarios', methods=['GET'])
 def obtener_usuarios():
     try:
@@ -79,14 +83,11 @@ def eliminar_usuario(id):
     except mysql.connector.Error as err:
         return jsonify({"error": f"Error al eliminar usuario: {err}"}), 500
     
-# Ruta para editar parcialmente un usuario
 @app.route('/usuarios/<int:id>', methods=['PATCH'])
 def editar_usuario(id):
     try:
-        # Obtener datos del cuerpo de la solicitud
         data = request.get_json()
         
-        # Verificar qué campos se están actualizando
         if 'nombre' in data:
             cursor.execute("UPDATE usuarios SET nombre = %s WHERE id = %s", (data['nombre'], id))
         if 'email' in data:
@@ -96,7 +97,6 @@ def editar_usuario(id):
         
         mydb.commit()
 
-        # Obtener y devolver el usuario actualizado
         cursor.execute("SELECT * FROM usuarios WHERE id = %s", (id,))
         usuario_actualizado = cursor.fetchone()
         return jsonify({"mensaje": "Usuario actualizado correctamente", "usuario": usuario_actualizado}), 200

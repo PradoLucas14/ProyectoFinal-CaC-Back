@@ -1,0 +1,44 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# IDEs y editores
+.vscode/
+.idea/
+
+# Entornos
+.env
+
+# Archivos compilados
+*.com
+*.class
+*.dll
+*.exe
+*.o
+*.so
+
+# Paquetes
+*.7z
+*.dmg
+*.gz
+*.iso
+*.jar
+*.rar
+*.tar
+*.zip
+
+# Registros y bases de datos
+*.log
+*.sql
+*.sqlite
+
+# Archivos generados por el sistema operativo
+.DS_Store
+ehthumbs.db
+Icon?
+Thumbs.db
+
+# Ignorar el archivo de configuración de la contraseña de la base de datos
+database.ini
